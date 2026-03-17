@@ -1,0 +1,649 @@
+import tkinter as tk
+from tkinter import ttk, messagebox
+
+
+# ---------------------------------
+# Calculation functions
+# ---------------------------------
+def calculate_bmr(sex: str, age: int, height_cm: float, weight_kg: float) -> float:
+    sex = sex.lower().strip()
+
+    if sex in ("male", "m"):
+        return 10 * weight_kg + 6.25 * height_cm - 5 * age + 5
+    elif sex in ("female", "f"):
+        return 10 * weight_kg + 6.25 * height_cm - 5 * age - 161
+    else:
+        raise ValueError("Sex must be male or female.")
+
+
+def get_activity_multiplier(choice: int) -> float:
+    multipliers = {
+        1: 1.2,
+        2: 1.375,
+        3: 1.55,
+        4: 1.725,
+        5: 1.9
+    }
+    return multipliers[choice]
+
+
+def convert_height_to_cm(height_value: float, unit: str) -> float:
+    if unit == "cm":
+        return height_value
+    elif unit == "in":
+        return height_value * 2.54
+    else:
+        raise ValueError("Invalid height unit.")
+
+
+def convert_weight_to_kg(weight_value: float, unit: str) -> float:
+    if unit == "kg":
+        return weight_value
+    elif unit == "lb":
+        return weight_value * 0.45359237
+    else:
+        raise ValueError("Invalid weight unit.")
+
+
+def convert_kg_to_lb(weight_kg: float) -> float:
+    return weight_kg * 2.20462262
+
+
+def calculate_bmi(weight_kg: float, height_cm: float) -> float:
+    height_m = height_cm / 100
+    return weight_kg / (height_m ** 2)
+
+
+def get_bmi_category(bmi: float) -> str:
+    if bmi < 18.5:
+        return "Underweight"
+    elif bmi < 25:
+        return "Normal weight"
+    elif bmi < 30:
+        return "Overweight"
+    else:
+        return "Obese"
+
+
+def format_weeks_to_time(weeks: float) -> str:
+    if weeks <= 0:
+        return "0 weeks"
+
+    if weeks < 4:
+        return f"{weeks:.1f} weeks"
+
+    months = weeks / 4.345
+    if months < 12:
+        return f"{weeks:.1f} weeks (~{months:.1f} months)"
+
+    years = months / 12
+    return f"{weeks:.1f} weeks (~{months:.1f} months / {years:.1f} years)"
+
+
+# ---------------------------------
+# Main calculation
+# ---------------------------------
+def calculate():
+    try:
+        sex = sex_var.get().strip().lower()
+        age = int(age_entry.get().strip())
+        height_value = float(height_entry.get().strip())
+        weight_value = float(weight_entry.get().strip())
+        goal_weight_value = float(goal_weight_entry.get().strip())
+
+        height_unit = height_unit_var.get()
+        weight_unit = weight_unit_var.get()
+        goal_weight_unit = goal_weight_unit_var.get()
+
+        activity_choice = int(activity_var.get())
+        goal_plan = goal_plan_var.get()
+
+        if sex not in ("male", "female"):
+            messagebox.showerror("Input Error", "Please select male or female.")
+            return
+
+        if not (1 <= age <= 100):
+            messagebox.showerror("Input Error", "Age must be between 1 and 100.")
+            return
+
+        # Height validation
+        if height_unit == "cm":
+            if not (90 <= height_value <= 230):
+                messagebox.showerror("Input Error", "Height in cm must be between 90 and 230.")
+                return
+        elif height_unit == "in":
+            if not (48 <= height_value <= 96):
+                messagebox.showerror("Input Error", "Height in inches must be between 48 and 96.")
+                return
+
+        # Current weight validation
+        if weight_unit == "kg":
+            if not (36 <= weight_value <= 272):
+                messagebox.showerror("Input Error", "Weight in kg must be between 36 and 272.")
+                return
+        elif weight_unit == "lb":
+            if not (80 <= weight_value <= 600):
+                messagebox.showerror("Input Error", "Weight in pounds must be between 80 and 600.")
+                return
+
+        # Goal weight validation
+        if goal_weight_unit == "kg":
+            if not (36 <= goal_weight_value <= 272):
+                messagebox.showerror("Input Error", "Goal weight in kg must be between 36 and 272.")
+                return
+        elif goal_weight_unit == "lb":
+            if not (80 <= goal_weight_value <= 600):
+                messagebox.showerror("Input Error", "Goal weight in pounds must be between 80 and 600.")
+                return
+
+        # Convert to metric for calculations
+        height_cm = convert_height_to_cm(height_value, height_unit)
+        current_weight_kg = convert_weight_to_kg(weight_value, weight_unit)
+        goal_weight_kg = convert_weight_to_kg(goal_weight_value, goal_weight_unit)
+
+        # Main calculations
+        bmr = calculate_bmr(sex, age, height_cm, current_weight_kg)
+        multiplier = get_activity_multiplier(activity_choice)
+        tdee = bmr * multiplier
+
+        bmi = calculate_bmi(current_weight_kg, height_cm)
+        bmi_category = get_bmi_category(bmi)
+
+        cut_low = tdee - 500
+        cut_high = tdee - 300
+
+        aggressive_cut_low = tdee - 750
+        aggressive_cut_high = tdee - 500
+
+        bulk_low = tdee + 200
+        bulk_high = tdee + 300
+
+        # Need to lose, gain, or maintain?
+        weight_difference_kg = goal_weight_kg - current_weight_kg
+        weight_difference_lb = abs(convert_kg_to_lb(weight_difference_kg))
+
+        if abs(weight_difference_kg) < 0.01:
+            action_text = "You are already at your goal weight."
+            timeline_text = "Estimated time: 0 weeks"
+            recommendation = f"Maintain around {tdee:.0f} calories/day"
+
+        elif weight_difference_kg < 0:
+            # Need to lose weight
+            if goal_plan == "Maintain":
+                recommendation = (
+                    f"To lose weight, choose Cut or Aggressive Cut instead of Maintain.\n"
+                    f"Maintenance calories: {tdee:.0f} calories/day"
+                )
+                action_text = f"You want to lose about {weight_difference_lb:.1f} lb."
+                timeline_text = "Maintain will not move you toward your goal weight."
+
+            elif goal_plan == "Cut":
+                min_weeks = weight_difference_lb / 1.0
+                max_weeks = weight_difference_lb / 0.6
+                recommendation = f"Eat about {cut_low:.0f} - {cut_high:.0f} calories/day"
+                action_text = (
+                    f"You need to lose about {weight_difference_lb:.1f} lb.\n"
+                    f"A standard cut is usually a steady and more manageable approach."
+                )
+                timeline_text = (
+                    f"Estimated time: {format_weeks_to_time(min_weeks)} to {format_weeks_to_time(max_weeks)}\n"
+                    f"Expected weekly change: about 0.6 to 1.0 lb lost per week"
+                )
+
+            elif goal_plan == "Aggressive Cut":
+                min_weeks = weight_difference_lb / 1.5
+                max_weeks = weight_difference_lb / 1.0
+                recommendation = f"Eat about {aggressive_cut_low:.0f} - {aggressive_cut_high:.0f} calories/day"
+                action_text = (
+                    f"You need to lose about {weight_difference_lb:.1f} lb.\n"
+                    f"An aggressive cut is faster, but usually harder to sustain."
+                )
+                timeline_text = (
+                    f"Estimated time: {format_weeks_to_time(min_weeks)} to {format_weeks_to_time(max_weeks)}\n"
+                    f"Expected weekly change: about 1.0 to 1.5 lb lost per week"
+                )
+
+            else:  # Lean Bulk chosen but goal is lower
+                recommendation = (
+                    f"Lean bulk is for gaining weight, but your goal weight is lower than your current weight.\n"
+                    f"For fat loss, use Cut or Aggressive Cut."
+                )
+                action_text = f"You want to lose about {weight_difference_lb:.1f} lb."
+                timeline_text = "Lean bulk does not match your selected goal weight."
+
+        else:
+            # Need to gain weight
+            if goal_plan == "Lean Bulk":
+                min_weeks = weight_difference_lb / 0.6
+                max_weeks = weight_difference_lb / 0.4
+                recommendation = f"Eat about {bulk_low:.0f} - {bulk_high:.0f} calories/day"
+                action_text = (
+                    f"You need to gain about {weight_difference_lb:.1f} lb.\n"
+                    f"A lean bulk helps you gain weight more slowly and with better control."
+                )
+                timeline_text = (
+                    f"Estimated time: {format_weeks_to_time(min_weeks)} to {format_weeks_to_time(max_weeks)}\n"
+                    f"Expected weekly change: about 0.4 to 0.6 lb gained per week"
+                )
+
+            elif goal_plan == "Maintain":
+                recommendation = (
+                    f"To gain weight, choose Lean Bulk instead of Maintain.\n"
+                    f"Maintenance calories: {tdee:.0f} calories/day"
+                )
+                action_text = f"You want to gain about {weight_difference_lb:.1f} lb."
+                timeline_text = "Maintain will not move you toward your goal weight."
+
+            else:
+                recommendation = (
+                    f"Your goal weight is above your current weight.\n"
+                    f"For weight gain, choose Lean Bulk."
+                )
+                action_text = f"You want to gain about {weight_difference_lb:.1f} lb."
+                timeline_text = "Cutting plans do not match your selected goal weight."
+
+        # Update result cards
+        bmr_value_label.config(text=f"{bmr:.0f} cal")
+        tdee_value_label.config(text=f"{tdee:.0f} cal")
+        bmi_value_label.config(text=f"{bmi:.1f} ({bmi_category})")
+        goal_value_label.config(text=recommendation)
+
+        # Fill details box
+        details_text.config(state="normal")
+        details_text.delete("1.0", tk.END)
+        details_text.insert(
+            tk.END,
+            f"Maintenance Calories: {tdee:.0f} cal/day\n"
+            f"Standard Cut: {cut_low:.0f} - {cut_high:.0f} cal/day\n"
+            f"Aggressive Cut: {aggressive_cut_low:.0f} - {aggressive_cut_high:.0f} cal/day\n"
+            f"Lean Bulk: {bulk_low:.0f} - {bulk_high:.0f} cal/day\n\n"
+            f"What you need to do:\n{action_text}\n\n"
+            f"Goal timeline:\n{timeline_text}"
+        )
+        details_text.config(state="disabled")
+
+    except ValueError:
+        messagebox.showerror("Input Error", "Please enter valid numbers in all fields.")
+
+
+def clear_fields():
+    age_entry.delete(0, tk.END)
+    height_entry.delete(0, tk.END)
+    weight_entry.delete(0, tk.END)
+    goal_weight_entry.delete(0, tk.END)
+
+    sex_var.set("male")
+    height_unit_var.set("cm")
+    weight_unit_var.set("kg")
+    goal_weight_unit_var.set("kg")
+    activity_var.set("1")
+    goal_plan_var.set("Maintain")
+
+    bmr_value_label.config(text="--")
+    tdee_value_label.config(text="--")
+    bmi_value_label.config(text="--")
+    goal_value_label.config(text="--")
+
+    details_text.config(state="normal")
+    details_text.delete("1.0", tk.END)
+    details_text.config(state="disabled")
+
+
+# ---------------------------------
+# Window setup
+# ---------------------------------
+root = tk.Tk()
+root.title("Calorie Maintenance Calculator")
+root.geometry("980x760")
+root.configure(bg="#0B1220")
+root.resizable(False, False)
+
+# ---------------------------------
+# Colors for better readability
+# ---------------------------------
+BG_MAIN = "#0B1220"
+BG_HEADER = "#111827"
+BG_CARD = "#1F2937"
+BG_INPUT = "#111827"
+FG_MAIN = "#F9FAFB"
+FG_SOFT = "#D1D5DB"
+FG_MUTED = "#9CA3AF"
+GREEN = "#22C55E"
+RED = "#EF4444"
+BLUE = "#3B82F6"
+BORDER = "#334155"
+
+# ---------------------------------
+# ttk style
+# ---------------------------------
+style = ttk.Style()
+style.theme_use("clam")
+
+style.configure(
+    "Dark.TCombobox",
+    fieldbackground=BG_INPUT,
+    background=BG_INPUT,
+    foreground=FG_MAIN,
+    bordercolor=BORDER,
+    lightcolor=BORDER,
+    darkcolor=BORDER,
+    arrowcolor=FG_MAIN
+)
+
+# ---------------------------------
+# Header
+# ---------------------------------
+header_frame = tk.Frame(root, bg=BG_HEADER, height=95)
+header_frame.pack(fill="x")
+
+title_label = tk.Label(
+    header_frame,
+    text="Calorie Maintenance Calculator",
+    font=("Arial", 22, "bold"),
+    fg=FG_MAIN,
+    bg=BG_HEADER
+)
+title_label.pack(pady=(14, 4))
+
+subtitle_label = tk.Label(
+    header_frame,
+    text="Calculate maintenance calories, BMI, goal timeline, and weekly weight-change estimates",
+    font=("Arial", 11),
+    fg=FG_SOFT,
+    bg=BG_HEADER
+)
+subtitle_label.pack()
+
+# ---------------------------------
+# Main container
+# ---------------------------------
+main_frame = tk.Frame(root, bg=BG_MAIN)
+main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+# ---------------------------------
+# Left input card
+# ---------------------------------
+input_card = tk.Frame(main_frame, bg=BG_CARD, highlightbackground=BORDER, highlightthickness=1)
+input_card.place(x=0, y=0, width=400, height=620)
+
+input_title = tk.Label(
+    input_card,
+    text="Your Information",
+    font=("Arial", 17, "bold"),
+    fg=FG_MAIN,
+    bg=BG_CARD
+)
+input_title.pack(anchor="w", padx=20, pady=(20, 14))
+
+form_frame = tk.Frame(input_card, bg=BG_CARD)
+form_frame.pack(fill="both", padx=20)
+
+label_style = {"bg": BG_CARD, "fg": FG_MAIN, "font": ("Arial", 11, "bold")}
+entry_style = {
+    "bg": BG_INPUT,
+    "fg": FG_MAIN,
+    "insertbackground": FG_MAIN,
+    "font": ("Arial", 11),
+    "relief": "flat",
+    "bd": 0
+}
+
+def make_entry(parent, width=20):
+    entry = tk.Entry(parent, width=width, **entry_style)
+    return entry
+
+# Sex
+tk.Label(form_frame, text="Sex", **label_style).grid(row=0, column=0, sticky="w", pady=8)
+sex_var = tk.StringVar(value="male")
+sex_menu = ttk.Combobox(
+    form_frame,
+    textvariable=sex_var,
+    values=["male", "female"],
+    state="readonly",
+    width=18,
+    style="Dark.TCombobox"
+)
+sex_menu.grid(row=0, column=1, pady=8, sticky="ew")
+
+# Age
+tk.Label(form_frame, text="Age", **label_style).grid(row=1, column=0, sticky="w", pady=8)
+age_entry = make_entry(form_frame)
+age_entry.grid(row=1, column=1, pady=8, sticky="ew", ipady=8)
+
+# Height
+tk.Label(form_frame, text="Height", **label_style).grid(row=2, column=0, sticky="w", pady=8)
+height_frame = tk.Frame(form_frame, bg=BG_CARD)
+height_frame.grid(row=2, column=1, pady=8, sticky="ew")
+
+height_entry = make_entry(height_frame, width=11)
+height_entry.pack(side="left", ipady=8)
+
+height_unit_var = tk.StringVar(value="cm")
+height_unit_menu = ttk.Combobox(
+    height_frame,
+    textvariable=height_unit_var,
+    values=["cm", "in"],
+    state="readonly",
+    width=7,
+    style="Dark.TCombobox"
+)
+height_unit_menu.pack(side="left", padx=8)
+
+# Current weight
+tk.Label(form_frame, text="Current Weight", **label_style).grid(row=3, column=0, sticky="w", pady=8)
+weight_frame = tk.Frame(form_frame, bg=BG_CARD)
+weight_frame.grid(row=3, column=1, pady=8, sticky="ew")
+
+weight_entry = make_entry(weight_frame, width=11)
+weight_entry.pack(side="left", ipady=8)
+
+weight_unit_var = tk.StringVar(value="kg")
+weight_unit_menu = ttk.Combobox(
+    weight_frame,
+    textvariable=weight_unit_var,
+    values=["kg", "lb"],
+    state="readonly",
+    width=7,
+    style="Dark.TCombobox"
+)
+weight_unit_menu.pack(side="left", padx=8)
+
+# Goal weight
+tk.Label(form_frame, text="Goal Weight", **label_style).grid(row=4, column=0, sticky="w", pady=8)
+goal_weight_frame = tk.Frame(form_frame, bg=BG_CARD)
+goal_weight_frame.grid(row=4, column=1, pady=8, sticky="ew")
+
+goal_weight_entry = make_entry(goal_weight_frame, width=11)
+goal_weight_entry.pack(side="left", ipady=8)
+
+goal_weight_unit_var = tk.StringVar(value="kg")
+goal_weight_unit_menu = ttk.Combobox(
+    goal_weight_frame,
+    textvariable=goal_weight_unit_var,
+    values=["kg", "lb"],
+    state="readonly",
+    width=7,
+    style="Dark.TCombobox"
+)
+goal_weight_unit_menu.pack(side="left", padx=8)
+
+# Activity
+tk.Label(form_frame, text="Activity Level", **label_style).grid(row=5, column=0, sticky="w", pady=8)
+activity_var = tk.StringVar(value="1")
+activity_menu = ttk.Combobox(
+    form_frame,
+    textvariable=activity_var,
+    values=["1", "2", "3", "4", "5"],
+    state="readonly",
+    width=18,
+    style="Dark.TCombobox"
+)
+activity_menu.grid(row=5, column=1, pady=8, sticky="ew")
+
+activity_info = tk.Label(
+    form_frame,
+    text=(
+        "1 = Sedentary\n"
+        "2 = Light exercise\n"
+        "3 = Moderate exercise\n"
+        "4 = Very active\n"
+        "5 = Extra active"
+    ),
+    bg=BG_CARD,
+    fg=FG_SOFT,
+    font=("Arial", 10),
+    justify="left"
+)
+activity_info.grid(row=6, column=0, columnspan=2, sticky="w", pady=(2, 14))
+
+# Goal plan
+tk.Label(form_frame, text="Plan Type", **label_style).grid(row=7, column=0, sticky="w", pady=8)
+goal_plan_var = tk.StringVar(value="Maintain")
+goal_plan_menu = ttk.Combobox(
+    form_frame,
+    textvariable=goal_plan_var,
+    values=["Maintain", "Cut", "Aggressive Cut", "Lean Bulk"],
+    state="readonly",
+    width=18,
+    style="Dark.TCombobox"
+)
+goal_plan_menu.grid(row=7, column=1, pady=8, sticky="ew")
+
+plan_info = tk.Label(
+    form_frame,
+    text="Pick the plan you want to follow so the app can estimate calories and timeline.",
+    bg=BG_CARD,
+    fg=FG_SOFT,
+    font=("Arial", 10),
+    wraplength=320,
+    justify="left"
+)
+plan_info.grid(row=8, column=0, columnspan=2, sticky="w", pady=(2, 18))
+
+form_frame.columnconfigure(1, weight=1)
+
+# Buttons
+button_frame = tk.Frame(input_card, bg=BG_CARD)
+button_frame.pack(pady=20)
+
+calculate_button = tk.Button(
+    button_frame,
+    text="Calculate",
+    command=calculate,
+    bg=GREEN,
+    fg="white",
+    activebackground="#16A34A",
+    activeforeground="white",
+    font=("Arial", 11, "bold"),
+    relief="flat",
+    width=13,
+    padx=10,
+    pady=10
+)
+calculate_button.grid(row=0, column=0, padx=8)
+
+clear_button = tk.Button(
+    button_frame,
+    text="Clear",
+    command=clear_fields,
+    bg=RED,
+    fg="white",
+    activebackground="#DC2626",
+    activeforeground="white",
+    font=("Arial", 11, "bold"),
+    relief="flat",
+    width=13,
+    padx=10,
+    pady=10
+)
+clear_button.grid(row=0, column=1, padx=8)
+
+# ---------------------------------
+# Right result side
+# ---------------------------------
+results_frame = tk.Frame(main_frame, bg=BG_MAIN)
+results_frame.place(x=430, y=0, width=510, height=620)
+
+def make_result_card(parent, title, x, y, width=240, height=110):
+    card = tk.Frame(parent, bg=BG_CARD, highlightbackground=BORDER, highlightthickness=1)
+    card.place(x=x, y=y, width=width, height=height)
+
+    title_label = tk.Label(
+        card,
+        text=title,
+        bg=BG_CARD,
+        fg=FG_SOFT,
+        font=("Arial", 11, "bold")
+    )
+    title_label.pack(anchor="w", padx=16, pady=(15, 6))
+
+    value_label = tk.Label(
+        card,
+        text="--",
+        bg=BG_CARD,
+        fg=FG_MAIN,
+        font=("Arial", 18, "bold"),
+        wraplength=width - 30,
+        justify="left"
+    )
+    value_label.pack(anchor="w", padx=16)
+
+    return value_label
+
+bmr_value_label = make_result_card(results_frame, "BMR", 0, 0)
+tdee_value_label = make_result_card(results_frame, "TDEE", 255, 0)
+bmi_value_label = make_result_card(results_frame, "BMI", 0, 125, width=495)
+
+goal_card = tk.Frame(results_frame, bg=BG_CARD, highlightbackground=BORDER, highlightthickness=1)
+goal_card.place(x=0, y=250, width=495, height=130)
+
+goal_title = tk.Label(
+    goal_card,
+    text="Recommended Calorie Target",
+    bg=BG_CARD,
+    fg=FG_SOFT,
+    font=("Arial", 11, "bold")
+)
+goal_title.pack(anchor="w", padx=16, pady=(15, 6))
+
+goal_value_label = tk.Label(
+    goal_card,
+    text="--",
+    bg=BG_CARD,
+    fg=FG_MAIN,
+    font=("Arial", 15, "bold"),
+    wraplength=455,
+    justify="left"
+)
+goal_value_label.pack(anchor="w", padx=16)
+
+details_card = tk.Frame(results_frame, bg=BG_CARD, highlightbackground=BORDER, highlightthickness=1)
+details_card.place(x=0, y=395, width=495, height=225)
+
+details_title = tk.Label(
+    details_card,
+    text="Plan Details",
+    bg=BG_CARD,
+    fg=FG_SOFT,
+    font=("Arial", 11, "bold")
+)
+details_title.pack(anchor="w", padx=16, pady=(14, 8))
+
+details_text = tk.Text(
+    details_card,
+    height=10,
+    width=48,
+    bg=BG_INPUT,
+    fg=FG_MAIN,
+    insertbackground=FG_MAIN,
+    font=("Consolas", 10),
+    relief="flat",
+    bd=0,
+    padx=12,
+    pady=12,
+    wrap="word"
+)
+details_text.pack(padx=16, pady=(0, 16), fill="both", expand=True)
+details_text.config(state="disabled")
+
+root.mainloop()
