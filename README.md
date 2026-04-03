@@ -12,7 +12,7 @@ A Python GUI application that calculates your daily calorie needs (TDEE), BMI, a
 ### How to Run
 
 1. Clone the repository:
-   git clone https://github.com/yourusername/Calorie-Maintenance-App.git
+   git clone https://github.com/newtyng/Calorie-Maintenance-App.git
 
 2. Navigate into the folder:
    cd Calorie-Maintenance-App
